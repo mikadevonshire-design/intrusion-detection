@@ -1,0 +1,16 @@
+# Copy this file to terraform.tfvars and fill in your GCP project ID:
+# cp terraform.tfvars.example terraform.tfvars
+
+project_id            = "YOUR_PROJECT_ID"
+region                = "us-central1"
+zone                  = "us-central1-a"
+vpc_name              = "cloud-ids-vpc"
+subnet_name           = "cloud-ids-subnet"
+subnet_cidr           = "192.168.10.0/24"
+ids_endpoint_name     = "cloud-ids-endpoint-01"
+ids_severity          = "INFORMATIONAL"
+server_vm_name        = "ids-target-server"
+server_internal_ip    = "192.168.10.10"
+client_vm_name        = "ids-attacker-client"
+client_internal_ip    = "192.168.10.20"
+packet_mirroring_name = "cloud-ids-packet-mirroring"

@@ -1,0 +1,22 @@
+# Terraform state, lock files, and local variable overrides
+**/.terraform/*
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Unrelated SAIF demo artifacts in workspace
+saif-data/
+SAIF_DEMO_GUIDE.md
+launch_saif_demo.sh
+saif_project_report.html

